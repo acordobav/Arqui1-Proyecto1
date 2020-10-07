@@ -11,25 +11,44 @@ section .data
     number2 db "2", 0
     number3 db "3", 0
 
+%macro syswrite 1
+    push rax
+    push rdi
+    push rsi
+    push rdx
+
+    mov rax, SYS_WRITE
+    mov rdi, 1
+    mov rsi, %1
+    mov rdx, 2
+    syscall
+
+    pop rdx
+    pop rsi
+    pop rdi
+    pop rax
+%endmacro
+
 section .bss
-    text resb 2
+    text resb 1
 
 section .text
     global _start
 
 _start:
     ; Apertura del archivo en modo lectura 
-    mov rax, SYS_OPEN
-    mov rdi, filename
-    mov rsi, O_RDONLY
-    mov rdx, 0
+    mov rax, SYS_OPEN   ; Numero de llamada al sistema 'open'
+    mov rdi, filename   ; Ruta del archivo
+    mov rsi, O_RDONLY   ; Modo de solo lectura
+    mov rdx, 0          
     syscall
 
-    ; Lectura del archivo
-    mov r8, rax
-    mov r9, 0       ; R9 = contador de digitos
-    mov r10, 0      ; R10 = contador de numeros
+    mov r8, rax         ; Se almacena el file descriptor en R8
+    mov r9, 0           ; R9 = contador de digitos
+    mov r10, 0          ; R10 = contador de numeros
+    push r9             ; Se guarda un 0 en el stack 
 _readChar:
+    ; Lectura del archivo
     mov rdi, r8
     mov rax, SYS_READ
     mov rsi, text
@@ -41,59 +60,55 @@ _readChar:
     mov edi, space      ; Segundo operando
     mov ecx, spacelen   ; Cantidad de bytes a comparar
     rep cmpsb           ; Comparacion de esi y edi
+    je  _saveNumber
 
-    je _true
-    jmp _false
+    ; Se convierte el texto a un numero
+    mov edx, text       ; Registro donde se almacena el argumento
+    call _string2int   
+    ; RAX contiene el numero obtenido del string
 
-_true: 
-    inc r10             ; Incrementar contador de numeros
-    call _buildNumber   ; Se reconstruye el numero
-    mov r9, 0           ; Reiniciar contador de digitos
-    cmp r10, 2          ; Contador de numeros == 2 ?
-    je _buildEncriptedNumber
+    ; Se construye el numero
+    mov r9, rax         ; Se copia el numero leido
+    pop rax             ; Se obtiene el numero construido hasta el momento
+    mov rdi, 10
+    mul rdi             ; Se multiplica por 10 el numero construido hasta el momento
+    add r9, rax         ; Se suma el numero leido
+    push r9             ; Se guarda el numero construido hasta el momento
     jmp _readChar
-
-_false:
-    push text       ; Almacenar caracter en el stack
-    inc r9          ; Aumento contador de digitos
-    jmp _readChar   ; Leer siguiente caracter
-
-_buildNumber:
-    ; En R11 se construye el numero
-    ; Resultado se guarda en la pila
-    ; R9 es el contador de digitos
-    ; RBX se utiliza para multiplicar por 10 el digito
-    pop rax
-    mov rbp, rax
-    mov r11, 0
-    mov rbx, 1
-    mov rsi, 10
-
-    pop r14
-    push r14
-    printVal r14
-
-_buildNumberLoop:
-    pop rdx             ; Obtener caracter almacenado
-    call _string2int    ; Se convierte el caracter a un numero
-    mul rbx             ; Se multiplica el numero por un factor de 10
-    add r11, rax        ; Numero se construye en R11 
-    dec r9              ; Contador digitos -= 1
-    
-    mov rax, rbx
-    mul rsi             ; Aumenta en 10 el valor de RBX
-    mov rbx, rax
-
-    cmp r9, 0           ; Contador digitos == 1 ?
-    je _saveNumber      ; Almacenar numero obtenido
-    jmp _buildNumberLoop
-
 _saveNumber:
-    push r11        ; Almacenar numero en la pila
-    push rbp
-    ret
+    inc r10             ; Incrementar contador de numeros
+    cmp r10, 2          ; Contador numeros == 2 ?
+    je _buildEncriptedNumber
+
+    push 0              ; Se reinicia el numero construido
+    jmp _readChar       ; Se construye el siguiente numero
+
+_buildEncriptedNumber:
+    ; Cierre del archivo
+    mov rax, SYS_CLOSE
+    mov rdi, R8
+    syscall
+    
+    pop rdi
+    printVal rdi
+    pop rax
+    shl rax, 8
+    or rax, rdi 
+    printVal rax
+    exit
+
+    ;pop rax
+    ;printVal r12
+    ;pop rax
+    ;printVal rax
+
+    exit
+
+
 
 _string2int:    
+    push rcx
+
     ;mov edx = string ; edx tiene el string del numero
     ; rax contiene el resultado
     atoi:
@@ -110,17 +125,6 @@ _string2int:
     add eax, ecx ; add in current digit
     jmp .top ; until done
     .done:
+
+    pop rcx
     ret
-
-_buildEncriptedNumber:
-    ; Cierre del archivo
-    mov rax, SYS_CLOSE
-    pop rdi
-    syscall
-    
-    ;pop rax
-    ;printVal rax
-    ;pop rax
-    ;printVal rax
-
-    exit
