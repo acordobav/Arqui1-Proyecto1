@@ -3,6 +3,13 @@ section .bss
 	digitSpacePos resb 8
 	printSpace resb 8
 %macro print 1
+	push rax
+	push rbx
+	push rcx
+	push rdx
+	push rsi
+	push rdi
+
 	mov rax, %1
 	mov [printSpace], rax
 	mov rbx, 0
@@ -19,9 +26,23 @@ section .bss
 	mov rsi, [printSpace]
 	mov rdx, rbx
 	syscall
+
+	pop rdi
+	pop rsi
+	pop rdx
+	pop rcx
+	pop rbx
+	pop rax
 %endmacro
 
 %macro printVal 1
+	push rax
+	push rbx
+	push rcx
+	push rdx
+	push rsi
+	push rdi
+
 	mov rax, %1
 %%printRAX:
 	mov rcx, digitSpace
@@ -62,6 +83,12 @@ section .bss
 	cmp rcx, digitSpace
 	jge %%printRAXLoop2
 
+	pop rdi
+	pop rsi
+	pop rdx
+	pop rcx
+	pop rbx
+	pop rax
 %endmacro
 
 %macro exit 0
