@@ -41,7 +41,7 @@ _start:
     call _string2int    ; Se convierte a un numero
     mov rcx, rax        ; Se guarda exponente en RCX
     
-    pop rdx             ; Modulo (d)
+    pop rdx             ; Modulo (n)
     call _string2int    ; Se convierte a un numero
     push rax            ; Se guarda el exponente en el stack
     push rcx            ; Se guarda el modulo en el stack
@@ -108,7 +108,6 @@ _decodeNumber:
     push rsi            ; Se guarda de nuevo en el stack
     push rdi            ; Se guarda de nuevo en el stack
 
-
     ;-------------------------------------------------------------------------
 
     ; Verificar si numero se encuentra dentro de la tabla
@@ -116,8 +115,8 @@ _decodeNumber:
     ;-------------------------------------------------------------------------
 
     ; Se calcula el modulo de la base para evitar calculos con numeros grandes
-    cmp rax, rdi        ; Se ejecuta solo si la base es diferente del modulo
-    jne _modBase
+    cmp rax, rdi        ; Se ejecuta solo si la base es mayor al modulo
+    jg _modBase
     
 _continueDecodeNumber: 
     ; Se preparan los parametros para aplicar la exponenciacion modular
@@ -174,7 +173,9 @@ _addExp:
     ; Funcion para sumar un resultado de la exponenciacion modular al resultado final
     push rax            ; Almacena en stack el resultado del modulo
     mul rcx             ; Multiplicacion iteraciones anteriores con el resultado obtenido
-    mov rcx, rax        ; Almacenar multiplicacion en RCX
+    mov rdx, 0
+    div rdi             ; Se calcula nuevamente el modulo para disminuir la magnitud del numero
+    mov rcx, rdx        ; Almacenar multiplicacion en RCX
     pop rax             ; Se recupera el resultado del modulo
     jmp _continueModExp
 
@@ -193,12 +194,7 @@ _currentExpIsNot1:
     jmp _modExp         ; Loop
 
 _endModExp:
-    mov rax, rcx        ; Se mueve el resultado final a RAX para aplicar un ultimo modulo
-    mov rdx, 0
-    div rdi             ; Calculo del modulo
-    mov rcx, rdx        ; Se guarda el resultado en RCX
     printVal rcx
-
     jmp _exit
 
 _exit: 
