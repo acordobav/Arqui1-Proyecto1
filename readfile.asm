@@ -163,10 +163,13 @@ _modExp:
 _continueModExp:
     shl r10, 1          ; Se mueve un valor a la izquierda el numero para enmascarar bits
     mul rax             ; RAX = RAX * RAX    Calculo de la siguiente exponenciacion
-    push rax
-    cmp r9, 1
-    je _currentExpIs1   ; Caso primera iteracion
-    jne _currentExpIsNot1; Caso demas iteraciones
+    push rax            ; Se almacena el valor del modulo calculado para hacer una multiplicacion
+    mov rdx, 2          ; Se debe multiplicar exponente por 2
+    mov rax, r9         ; Se mueve exponente a RAX para multiplicar
+    mul rdx             ; RAX = RAX * 2, se multiplica exponente por 2
+    mov r9, rax         ; Se guarda el nuevo resultado en el registro R9
+    pop rax             ; Se restaura el valor del modulo calculado
+    jmp _modExp         ; Loop
 
 
 _addExp:
@@ -178,20 +181,6 @@ _addExp:
     mov rcx, rdx        ; Almacenar multiplicacion en RCX
     pop rax             ; Se recupera el resultado del modulo
     jmp _continueModExp
-
-_currentExpIs1:
-    ; Caso primera iteracion, exponente es uno, debe sumarse una unidad
-    add r9, 1           ; Exponente += 1
-    pop rax             ; Se restaura el valor del modulo calculado
-    jmp _modExp         ; Loop
-
-_currentExpIsNot1:
-    mov rdx, 2          ; Se debe multiplicar exponente por 2
-    mov rax, r9         ; Se mueve exponente a RAX para multiplicar
-    mul rdx             ; RAX = RAX * 2, se multiplica exponente por 2
-    mov r9, rax         ; Se guarda el nuevo resultado en el registro
-    pop rax             ; Se restaura el valor del modulo calculado
-    jmp _modExp         ; Loop
 
 _endModExp:
     printVal rcx
