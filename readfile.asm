@@ -1,20 +1,28 @@
 %include "linux64.inc.asm"
 
 section .data
-    filename db "0/test.txt", 0
+    ;filename db "0/test.txt", 0
+    fileNotFound db "Archivo no encontrado, por favor verifique la ruta", 10, 0
+    fnfLen equ $-fileNotFound
+    argsError db "Cantidad de argumentos no es la correcta, por favor ingrese: ruta, exponente y modulo", 10, 0
+    argsErrorLen equ $-argsError
     space db " ", 0
     spacelen equ $-space
+    decodedImage db "decImage.txt", 0
 
-%macro syswrite 1
+%macro syswrite 3
+    ; %1 = File Descriptor
+    ; %2 = String a escribir (buffer)
+    ; %3 = Cantidad de bytes a escribir
     push rax
     push rdi
     push rsi
     push rdx
 
     mov rax, SYS_WRITE
-    mov rdi, 1
-    mov rsi, %1
-    mov rdx, 2
+    mov rdi, %1
+    mov rsi, %2
+    mov rdx, %3
     syscall
 
     pop rdx
@@ -23,43 +31,75 @@ section .data
     pop rax
 %endmacro
 
-section .bss
-    exp  resb 5         ; Exponente a la que elevar la base
-    mod  resb 5         ; Modulo de la base
-    char resb 1         ; Espacio de memoria para el caracter leido
+%macro sysopen 3
+    ; %1 = Ruta del archivo
+    ; %2 = Modo de apertura
+    push rdi
+    push rsi
+    push rdx
 
+    mov rax, SYS_OPEN   ; Numero de llamada al sistema 'open'
+    mov rdi, %1         ; Ruta del archivo
+    mov rsi, %2         ; Modo de apertura
+    mov rdx, %3          
+    syscall
+
+    pop rdx
+    pop rsi
+    pop rdi
+%endmacro
+
+section .bss
+    char resb 1         ; Espacio de memoria para el caracter
+    
 section .text
     global _start
 
 _start:
     ; Lectura de los argumentos del programa
+    ; Verificacion cantidad de argumentos debe ser 4
     pop rax             ; Numero de argumentos ingresados
+    cmp rax, 4          ; Cantidad esperada
+    jne _argsError
 
     pop rax             ; Path al ejecutable
 
-    pop rdx             ; Exponente (d)
+    ; Apertura del archivo de la imagen en modo lectura 
+    pop rdi             ; Ruta del archivo
+    sysopen rdi, O_RDONLY, 0
+    mov r8, rax         ; Se almacena el file descriptor en R8
+    cmp rax, 0          ; Verificacion si la apertura del archivo fue correcta
+    jl _fileNotFound
+
+    ; Se abre el archivo de la imagen desencriptada
+    sysopen decodedImage, O_CREAT+O_WRONLY+O_TRUNC, 0644o
+    mov rsi, rax        ; Se mueve a RSI el file descriptor de la nueva imagen
+
+    pop rdx             ; Argumento con el exponente (d) 
     call _string2int    ; Se convierte a un numero
     mov rcx, rax        ; Se guarda exponente en RCX
     
-    pop rdx             ; Modulo (n)
+    pop rdx             ; Argumento con el modulo (n)
     call _string2int    ; Se convierte a un numero
+    push rsi            ; Se guarda el file descriptor del archivo de la nueva imagen
     push rax            ; Se guarda el exponente en el stack
     push rcx            ; Se guarda el modulo en el stack
+    
+    jmp _readChar
 
-    ; Apertura del archivo de la imagen en modo lectura 
-    mov rax, SYS_OPEN   ; Numero de llamada al sistema 'open'
-    mov rdi, filename   ; Ruta del archivo
-    mov rsi, O_RDONLY   ; Modo de solo lectura
-    mov rdx, 0          
-    syscall
+_fileNotFound:
+    syswrite 1, fileNotFound, fnfLen
+    exit
 
-    mov r8, rax         ; Se almacena el file descriptor en R8
-
+_argsError: 
+    syswrite 1, argsError, argsErrorLen
+    exit
 
 _readChar:
     mov r9, 0           ; R9 = contador de digitos
     mov r10, 0          ; R10 = contador de numeros
     push r9             ; Se guarda un 0 en el stack 
+
 _readCharLoop:
     ; Lectura del archivo
     mov rdi, r8
@@ -67,6 +107,9 @@ _readCharLoop:
     mov rsi, char
     mov rdx, 1
     syscall
+
+    cmp rax, 0          ; Se verifica si los bytes leidos son cero
+    je _exit            ; Se termina el programa
 
     ; Se compara el caracter leido con un ' '
     mov esi, char       ; Primer operando
@@ -88,6 +131,7 @@ _readCharLoop:
     add r9, rax         ; Se suma el numero leido
     push r9             ; Se guarda el numero construido hasta el momento
     jmp _readCharLoop
+
 _saveNumber:
     inc r10             ; Incrementar contador de numeros
     cmp r10, 2          ; Contador numeros == 2 ?
@@ -105,8 +149,10 @@ _decodeNumber:
 
     pop rsi             ; Se obtiene el exponente
     pop rdi             ; Se obtiene el modulo
-    push rsi            ; Se guarda de nuevo en el stack
+    pop r12             ; Se obtiene el file descriptor de la nueva imagen
+    push r12            ; Se guarda de nuevo en el stack
     push rdi            ; Se guarda de nuevo en el stack
+    push rsi            ; Se guarda de nuevo en el stack
 
     ;-------------------------------------------------------------------------
 
@@ -171,7 +217,6 @@ _continueModExp:
     pop rax             ; Se restaura el valor del modulo calculado
     jmp _modExp         ; Loop
 
-
 _addExp:
     ; Funcion para sumar un resultado de la exponenciacion modular al resultado final
     push rax            ; Almacena en stack el resultado del modulo
@@ -183,8 +228,41 @@ _addExp:
     jmp _continueModExp
 
 _endModExp:
-    printVal rcx
-    jmp _exit
+    ;printVal rcx
+
+    ; Numero debe estar en RCX
+    ; RDI sera el contador de digitos
+    mov rsi, 10
+    mov rax, rcx
+    mov rdi, 0
+
+_int2string:
+    mov rdx, 0
+    div rsi         ; Se calcula numero menos significativo
+    inc rdi         ; Incrementar contador de digitos
+    add rdx, 48     ; Se convierte a ASCII
+    push rdx        ; Almacenar numero menos significativo
+    cmp rax, 0      ; Condicion de parada: no queda residuo 
+    je _writeNumber
+    jmp _int2string
+
+_writeNumber:
+    cmp rdi, 0              ; Condicion de parada, todos los digitos escritos
+    je _endWriting          ; Se lee siguiente numero encriptado
+
+    mov rcx, char           ; Se obtiene direccion de memoria del caracter
+    pop rax                 ; Se obtiene numero
+    mov [rcx], al          ; Se guarda numero en memoria
+    syswrite r12, char, 1   ; Escritura en el archivo imagen decodificada
+    dec rdi                 ; Disminuir contador de digitos
+    jmp _writeNumber
+
+_endWriting:
+    mov rcx, char
+    mov rax, 32
+    mov [rcx], rax
+    syswrite r12, char, 1   ; Escritura de un espacio en el archivo imagen decodificada 
+    jmp _readChar
 
 _exit: 
     ; Cierre del archivo
