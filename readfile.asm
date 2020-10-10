@@ -8,7 +8,8 @@ section .data
     argsErrorLen equ $-argsError
     space db " ", 0
     spacelen equ $-space
-    decodedImage db "decImage.txt", 0
+    decodedImage db "decodedimage.txt", 0
+    ;table db 0
 
 %macro syswrite 3
     ; %1 = File Descriptor
@@ -49,13 +50,95 @@ section .data
     pop rdi
 %endmacro
 
+%macro sysclose 1
+    ; %1 = File descriptor
+    push rax
+    push rdi
+
+    mov rax, SYS_CLOSE
+    mov rdi, %1
+    syscall
+
+    pop rdi
+    pop rax
+%endmacro
+
 section .bss
     char resb 1         ; Espacio de memoria para el caracter
+    table resb 771     ; Espacio de memoria para la tabla
     
 section .text
     global _start
 
 _start:
+    ;mov rdx, table
+
+
+    ;mov rbx, 31000
+    ;mov [rdx], bx
+
+    ;mov rbx, 100
+    ;add rdx, 2
+    ;mov [rdx], bl
+    ;-----------------
+
+
+    ;mov rbx, 32000
+    ;add rdx, 1
+    ;mov [rdx], bx
+
+    ;mov rbx, 200
+    ;add rdx, 2
+    ;mov [rdx], bl
+    ;-----------------
+
+
+    ;mov rbx, 33000
+    ;add rdx, 1
+    ;mov [rdx], bx
+
+    ;mov rbx, 182
+    ;add rdx, 2
+    ;mov [rdx], bl
+    ;-----------------
+
+
+    ;mov rbx, 34000
+    ;add rdx, 1
+    ;mov [rdx], bx
+
+    ;mov rbx, 77
+    ;add rdx, 2
+    ;mov [rdx], bl
+    ;-----------------
+
+
+    ;mov rbx, 1585
+    ;add rdx, 1
+    ;mov [rdx], bx
+
+    ;mov rbx, 182
+    ;add rdx, 2
+    ;mov [rdx], bl
+    ;-----------------
+
+
+    ;mov rcx, 5
+    ;mov rdx, table
+    ;add rdx, rcx
+    ;mov bx, [rdx]
+    ;and bx, 255
+    ;printVal rbx
+    ;exit
+
+    ;mov rax, 1585
+    ;call _verifyOnTable
+    ;printVal rcx
+    ;exit
+
+
+
+
     ; Lectura de los argumentos del programa
     ; Verificacion cantidad de argumentos debe ser 4
     pop rax             ; Numero de argumentos ingresados
@@ -157,6 +240,10 @@ _decodeNumber:
     ;-------------------------------------------------------------------------
 
     ; Verificar si numero se encuentra dentro de la tabla
+    call _verifyOnTable ; RAX = numero; RCX = resultado busqueda
+    cmp rcx, 0          ; 0 no encontrado, cotiene el numero en caso contrario
+    jne _writeNumber    ; Se escribe numero en el archivo
+    push rax            ; Se almacena numero codificado para ser almacenado en la tabla
 
     ;-------------------------------------------------------------------------
 
@@ -193,7 +280,7 @@ _modExp:
     ; Verificacion de la condicion de parada
     ; Exponente actual supera al exponente utilizado para codificar
     cmp r9, rsi         ; Condicion de parada
-    jg _endModExp       ; Termina si r9 > rsi
+    jg _updateTable     ; Termina si r9 > rsi
 
     ; Calculo del modulo
     mov rdx, 0
@@ -227,14 +314,36 @@ _addExp:
     pop rax             ; Se recupera el resultado del modulo
     jmp _continueModExp
 
-_endModExp:
-    ;printVal rcx
+_updateTable:
+    ; Funcion para actualizar la tabla de decodificaciones
+    ; Numero debe estar en RCX
+    pop rax             ; Se obtiene numero decodificado
+    push rbx
+    push rsi
+    mov rbx, table      ; RBX contiene el puntero a la tabla
 
+_updateTableLoop:
+    ; Funcion para encontrar la primera posicion vacia en la tabla de decodificaciones
+    mov si, [rbx]
+    cmp rsi, 0              ; Condicion de parada: se ha encontrado un espacio vacio
+    je _endUpdateTable
+    add rbx, 3              ; Aumentar direccion de memoria para leer siguiente valor
+    jmp _updateTableLoop
+_endUpdateTable:
+    mov [rbx], ax           ; Se almacena numero codificado en la tabla
+    add rbx, 2  
+    mov [rbx], cl           ; Se almacena numero decodificado en la tabla
+    pop rsi
+    pop rbx
+    jmp _writeNumber
+
+_writeNumber:
     ; Numero debe estar en RCX
     ; RDI sera el contador de digitos
     mov rsi, 10
     mov rax, rcx
     mov rdi, 0
+    jmp _int2string
 
 _int2string:
     mov rdx, 0
@@ -243,19 +352,19 @@ _int2string:
     add rdx, 48     ; Se convierte a ASCII
     push rdx        ; Almacenar numero menos significativo
     cmp rax, 0      ; Condicion de parada: no queda residuo 
-    je _writeNumber
+    je _writeNumberLoop
     jmp _int2string
 
-_writeNumber:
+_writeNumberLoop:
     cmp rdi, 0              ; Condicion de parada, todos los digitos escritos
     je _endWriting          ; Se lee siguiente numero encriptado
 
     mov rcx, char           ; Se obtiene direccion de memoria del caracter
     pop rax                 ; Se obtiene numero
-    mov [rcx], al          ; Se guarda numero en memoria
+    mov [rcx], al           ; Se guarda numero en memoria
     syswrite r12, char, 1   ; Escritura en el archivo imagen decodificada
     dec rdi                 ; Disminuir contador de digitos
-    jmp _writeNumber
+    jmp _writeNumberLoop
 
 _endWriting:
     mov rcx, char
@@ -264,17 +373,69 @@ _endWriting:
     syswrite r12, char, 1   ; Escritura de un espacio en el archivo imagen decodificada 
     jmp _readChar
 
-_exit: 
-    ; Cierre del archivo
-    mov rax, SYS_CLOSE
-    mov rdi, R8
-    syscall
+_verifyOnTable:
+    ; (Argumento) RAX: contiene el numero a verificar
+    ; (Resultado) RCX: 1 si se ha calculado el numero, 0 en caso contrario
     
-    ;pop rax
-    ;printVal r12
-    ;pop rax
-    ;printVal rax
+    ; RBX: registro con puntero a la tabla
+    ; RSI: registro para cargar valor de la tabla
+    push rbx
+    push rsi
+    mov rbx, table      ; RBX contiene el puntero a la tabla
+    mov rcx, 0          ; Valor de retorno por defecto
+    jmp _verifyOnTableLoop
 
+_verifyOnTableLoop:
+    mov si, [rbx]
+
+    cmp rsi, 0              ; Condicion de parada: se ha leido toda la tabla, no se encontro el valor
+    je _endVerifyTable
+
+    add rbx, 3              ; Aumentar direccion de memoria para leer siguiente valor
+    cmp rsi, rax            ; Verifica si valor de la tabla es el valor que se decodifica
+    jne _verifyOnTableLoop  ; Loop: leer siguiente valor en caso de que no sean iguales
+    sub rbx, 1              ; Se indexa al valor decodificado en la tabla
+    mov sil, [rbx]          ; Se obtiene valor decodificado
+    and rsi, 255            ; Se almacenan solo los 8 bits menos significativos
+    mov rcx, rsi            ; Valor decodificado se almacena en rcx
+    jmp _endVerifyTable
+
+_endVerifyTable:
+    ; Se restauran los registros
+    pop rsi
+    pop rbx
+    ret
+
+_exit: 
+    ; Cierre del archivo codificado
+    sysclose R8     ; Cerrar archivo imagen codificada
+    sysclose R12    ; Cerrar archivo imagen decodificada
+    exit            ; Fin de la ejecucion del programa
+
+    mov rbx, table      ; RBX contiene el puntero a la tabla
+    mov rax, 0
+    jmp _printTable
+
+_printTable:
+    printVal rbx
+    mov rsi, 0
+    mov si, [rbx]           
+    cmp si, 0              ; Condicion de parada: se ha leido toda la tabla, no se encontro el valor
+    je _endPrintTable
+
+    cmp rax, 256            ; Condicion de parada: se ha leido toda la tabla, no se encontro el valor
+    je _endPrintTable
+
+
+    add rbx, 2              ; Aumentar direccion de memoria para leer siguiente valor
+    mov sil, [rbx]          ; Se obtiene valor decodificado
+    and rsi, 255            ; Se almacenan solo los 8 bits menos significativos    
+    ;printVal rsi
+    inc rbx              ; Aumentar direccion de memoria para leer siguiente valor
+    inc rax
+    jmp _printTable
+
+_endPrintTable:
     exit
 
 
