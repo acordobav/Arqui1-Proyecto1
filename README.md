@@ -1,4 +1,4 @@
-En este archivo se mencionarán las herramientas utilizadas durante el desarrollo de la aplicación de desencriptación RSA del curso Arquitectura de Computadores I del Instituto Tecnológico de Costa Rica.
+Aquí se mencionan las herramientas utilizadas durante el desarrollo de la aplicación de desencriptación RSA del curso Arquitectura de Computadores I del Instituto Tecnológico de Costa Rica.
 
 1. Se utilizó el sistema operativo Ubuntu 20.04.
 2. Se eligió el ISA x86-64 para el programa que desencripta la imagen, este facilita la interacción con el sistema operartivo para realizar llamadas al sistema con el fin de realizar la lectura y escritura de archivos.
